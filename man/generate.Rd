@@ -5,8 +5,9 @@
 \title{Generate Mother-Child Linkages}
 \usage{
 generate(connectionDetails, cdmDatabaseSchema, resultsDatabaseSchema,
-  pppDatabaseSchema = cdmDatabaseSchema, motherRelationshipId = 40478925,
-  childRelationshipId = 40485452, ffdf = NULL)
+  pppDatabaseSchema = cdmDatabaseSchema, pppTableName = "payer_plan_period",
+  motherRelationshipId = 40478925, childRelationshipId = 40485452,
+  ffdf = NULL)
 }
 \arguments{
 \item{connectionDetails}{An R object of type ConnectionDetails (details for the function that contains server info, 
@@ -22,9 +23,14 @@ On SQL Server, this should specifiy both the database and the schema, so for exa
 Default is cdmDatabaseSchema. On SQL Server, this should specifiy both the database and the schema, 
 so for example, on SQL Server, 'cdm_scratch.dbo'.}
 
+\item{pppTableName}{(OPTIONAL) The name of the table to land the custom payer_plan_period table. By default, this is "payer_plan_period."}
+
 \item{motherRelationshipId}{(OPTIONAL) The concept Id to relate a mother to a child. By default, it is 40478925.}
 
 \item{childRelationshipId}{(OPTIONAL) The concept Id to relate a child to a parent. By default, it is 40485452.}
+
+\item{ffdf}{(OPTIONAL) An ffdf object with family ids -- only use this if your CDM payer_plan_period table doesn't
+have family ids}
 }
 \description{
 \code{generate} creates descriptive statistics summary for an entire OMOP CDM instance.

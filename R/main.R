@@ -31,12 +31,13 @@ getFamilyIds <- function(nativeConnectionDetails,
                                     @nativeStartDate as payer_plan_period_start_date, 
                                     @nativeEndDate as payer_plan_period_end_date
                                     from @nativeDatabaseSchema.@nativeTable;",
-                              nativeDatabaseSchema = nativeDatabaseSchema,
-                              nativeTable = nativeTable,
-                              nativePersonId = nativePersonId,
-                              nativeFamilyId = nativeFamilyId,
-                              nativeStartDate = nativeStartDate,
-                              nativeEndDate = nativeEndDate)$sql
+                                    nativeDatabaseSchema = nativeDatabaseSchema,
+                                    nativeTable = nativeTable,
+                                    nativePersonId = nativePersonId,
+                                    nativeFamilyId = nativeFamilyId,
+                                    nativeStartDate = nativeStartDate,
+                                    nativeEndDate = nativeEndDate)$sql
+  
   sql <- SqlRender::translateSql(sql = sql, targetDialect = nativeConnectionDetails$dbms)$sql
   
   connection <- DatabaseConnector::connect(connectionDetails = nativeConnectionDetails)
@@ -63,14 +64,18 @@ getFamilyIds <- function(nativeConnectionDetails,
 #' @param pppDatabaseSchema                Fully qualified name of database schema that holds the payer_plan_period table with family_source_value populated. 
 #'                                         Default is cdmDatabaseSchema. On SQL Server, this should specifiy both the database and the schema, 
 #'                                         so for example, on SQL Server, 'cdm_scratch.dbo'.                                          
+#' @param pppTableName                     (OPTIONAL) The name of the table to land the custom payer_plan_period table. By default, this is "payer_plan_period."                                         
 #' @param motherRelationshipId             (OPTIONAL) The concept Id to relate a mother to a child. By default, it is 40478925.
 #' @param childRelationshipId              (OPTIONAL) The concept Id to relate a child to a parent. By default, it is 40485452.
+#' @param ffdf                             (OPTIONAL) An ffdf object with family ids -- only use this if your CDM payer_plan_period table doesn't
+#'                                         have family ids
 #' 
 #' @export
 generate <- function(connectionDetails,
                      cdmDatabaseSchema,
                      resultsDatabaseSchema,
                      pppDatabaseSchema = cdmDatabaseSchema,
+                     pppTableName = "payer_plan_period",
                      motherRelationshipId = 40478925,
                      childRelationshipId = 40485452,
                      ffdf = NULL)
@@ -78,23 +83,16 @@ generate <- function(connectionDetails,
   checkPregnancyEpisodes <- function()
   {
     connection <- DatabaseConnector::connect(connectionDetails = connectionDetails)
-    
-    sql <- "select count(*) from INFORMATION_SCHEMA.TABLES
-            where table_schema = '@resultsDatabaseSchema' and table_name = 'pregnancy_episodes';"
-    sql <- SqlRender::renderSql(sql = sql, resultsDatabaseSchema = resultsDatabaseSchema)$sql
-    sql <- SqlRender::translateSql(sql = sql, targetDialect = connectionDetails$dbms)$sql
-    exists <- DatabaseConnector::querySql(connection = connection, sql = sql)
 
-    if (exists == 0)
-    {
-      return (FALSE)
-    }
-    
     sql <- "select count(*) from @resultsDatabaseSchema.pregnancy_episodes;"
     sql <- SqlRender::renderSql(sql = sql, resultsDatabaseSchema = resultsDatabaseSchema)$sql
     sql <- SqlRender::translateSql(sql = sql, targetDialect = connectionDetails$dbms)$sql
     
-    rowCount <- DatabaseConnector::querySql(connection = connection, sql = sql)
+    rowCount <- tryCatch( 
+      { DatabaseConnector::querySql(connection = connection, sql = sql) }, 
+      warning = function (w) { 0 },
+      error = function (e) { 0 }
+    )
     DatabaseConnector::disconnect(connection = connection)
     return (rowCount > 0)
   }
@@ -122,7 +120,7 @@ generate <- function(connectionDetails,
   if (!is.null(ffdf))
   {
     DatabaseConnector::insertTable(connection = connection, 
-                                   tableName = paste(pppDatabaseSchema, "payer_plan_period", sep = "."), 
+                                   tableName = paste(pppDatabaseSchema, pppTableName, sep = "."), 
                                    data = ffdf, 
                                    dropTableIfExists = TRUE, 
                                    createTable = TRUE, 
@@ -137,6 +135,7 @@ generate <- function(connectionDetails,
                                            cdmDatabaseSchema = cdmDatabaseSchema,
                                            resultsDatabaseSchema = resultsDatabaseSchema,
                                            pppDatabaseSchema = pppDatabaseSchema,
+                                           pppTableName = pppTableName,
                                            motherRelationshipId = motherRelationshipId,
                                            childRelationshipId = childRelationshipId)
 

@@ -2,7 +2,7 @@ Package: MotherChildLinkage
 Type: Package
 Title: Generates mother-child linkages in OMOP CDM v5.x databases in which pregnancy_episodes table is available.
 Version: 1.0
-Date: 2017-10-13
+Date: 2017-11-30
 Author: Jamie Weaver [aut, cre], 
   Jill Hardin [aut, cre], 
   Ajit Londhe [aut]

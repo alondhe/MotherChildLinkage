@@ -9,7 +9,7 @@ as
 		     ppp1.family_source_value, 
 		     pp1.year_of_birth
 	from @resultsDatabaseSchema.pregnancy_episodes p1 --pregnancy episode cohort location
-	join @pppDatabaseSchema.payer_plan_period ppp1 
+	join @pppDatabaseSchema.@pppTableName ppp1 
 		on ppp1.person_id = p1.person_id
 		and p1.episode_end_date >= ppp1.payer_plan_period_start_date 
 		and p1.episode_end_date <= ppp1.payer_plan_period_end_date
@@ -34,7 +34,7 @@ as
         when p1.day_of_birth is not null and p1.day_of_birth >= 1 and p1.day_of_birth <= 31 then p1.day_of_birth 
       else 1 end)) 
     as date_of_birth
-	from @pppDatabaseSchema.payer_plan_period ppp1
+	from @pppDatabaseSchema.@pppTableName ppp1
 	join @cdmDatabaseSchema.person p1
 		on ppp1.person_id = p1.person_id
 	join @cdmDatabaseSchema.observation_period op1
@@ -71,7 +71,7 @@ select distinct
   moms_per_kid
 into #candidate_mother_childs
 from candidate_mother_childs_all
-where baby_person_id in (select baby_person_id from candidate_mother_childs_all where moms_per_kid >= 2)
+where baby_person_id in (select baby_person_id from candidate_mother_childs_all where moms_per_kid < 2)
 ;
 
 IF OBJECT_ID('#probable_mother_childs', 'U') IS NOT NULL
@@ -101,7 +101,7 @@ join moms_births on cmc1.mom_person_id = moms_births.person_id
 
 insert into @cdmDatabaseSchema.fact_relationship 
   (domain_concept_id_1, fact_id_1, domain_concept_id_2, fact_id_2, relationship_concept_id)
-select 
+select distinct
   A.domain_concept_id_1,
   A.fact_id_1,
   A.domain_concept_id_2,
