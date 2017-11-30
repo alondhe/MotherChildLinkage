@@ -97,6 +97,9 @@ generate <- function(connectionDetails,
     return (rowCount > 0)
   }
   
+  if (is.null(pppDatabaseSchema)) { pppDatabaseSchema <- cdmDatabaseSchema }
+  if (is.null(pppTableName)) { pppTableName <- "payer_plan_period" }
+  
   # check if pregnancy episodes exist -------------------------------------------------
   
   if (!checkPregnancyEpisodes())
