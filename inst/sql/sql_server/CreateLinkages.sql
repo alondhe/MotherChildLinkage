@@ -1,5 +1,3 @@
-IF OBJECT_ID('#candidate_mother_childs', 'U') IS NOT NULL
-	drop table #candidate_mother_childs;
 
 --HINT DISTRIBUTE_ON_KEY(mom_person_id)
 with candidate_moms
@@ -16,6 +14,7 @@ as
 	join @cdmDatabaseSchema.person pp1 
 		on pp1.person_id = p1.person_id
 	where p1.outcome = 'LB/DELIV' --livebirth pregnancy episode outcome
+	group by p1.person_id, ppp1.family_source_value, pp1.year_of_birth
 ),
 candidate_babies
 as
@@ -41,63 +40,50 @@ as
 		on p1.person_id = op1.person_id
 		and op1.observation_period_start_date >= ppp1.payer_plan_period_start_date
 		and op1.observation_period_start_date <= ppp1.payer_plan_period_end_date
-	where year(observation_period_start_date) - p1.year_of_birth = 0
+	where year(observation_period_start_date) = p1.year_of_birth
 	  and p1.person_id not in (select person_id from @resultsDatabaseSchema.pregnancy_episodes) --pregnancy episode cohort location
 	group by p1.person_id, ppp1.family_source_value, p1.year_of_birth
-),
-candidate_mother_childs_all
-as
-(
-  select distinct 
-     candidate_moms.person_id as mom_person_id,
-     candidate_moms.year_of_birth as mom_yob,
-     candidate_babies.person_id as baby_person_id,
-     candidate_babies.date_of_birth as baby_dob,
-     ROW_NUMBER() OVER (PARTITION BY candidate_babies.person_id order by candidate_babies.person_id, candidate_moms.person_id) as moms_per_kid
-  from candidate_moms
-  join candidate_babies
-  	on candidate_moms.family_source_value = candidate_babies.family_source_value
-  join @cdmDatabaseSchema.observation_period op1
-  	on candidate_moms.person_id = op1.person_id
-  	and candidate_babies.date_of_birth >= op1.observation_period_start_date 
-  	and candidate_babies.date_of_birth <= op1.observation_period_end_date
-  where candidate_moms.person_id <> candidate_babies.person_id
 )
-select distinct
-  mom_person_id,
-  mom_yob,
-  baby_person_id,
-  baby_dob,
-  moms_per_kid
-into #candidate_mother_childs
-from candidate_mother_childs_all
-where baby_person_id in (select baby_person_id from candidate_mother_childs_all where moms_per_kid < 2)
+select distinct 
+   candidate_moms.person_id as mom_person_id,
+   candidate_moms.year_of_birth as mom_yob,
+   candidate_babies.person_id as baby_person_id,
+   candidate_babies.date_of_birth as baby_dob,
+   ROW_NUMBER() OVER (PARTITION BY candidate_babies.person_id order by candidate_babies.person_id, candidate_moms.person_id) as moms_per_kid
+into #candidates
+from candidate_moms
+join candidate_babies
+	on candidate_moms.family_source_value = candidate_babies.family_source_value
+join @cdmDatabaseSchema.observation_period op1
+	on candidate_moms.person_id = op1.person_id
+	and candidate_babies.date_of_birth >= op1.observation_period_start_date 
+	and candidate_babies.date_of_birth <= op1.observation_period_end_date
+where candidate_moms.person_id <> candidate_babies.person_id
 ;
 
-IF OBJECT_ID('#probable_mother_childs', 'U') IS NOT NULL
-	drop table #probable_mother_childs;
+delete from #candidates 
+where baby_person_id in (select baby_person_id from #candidates where moms_per_kid >= 2)
+;
 	
 --HINT DISTRIBUTE_ON_KEY(mom_person_id)
-with moms_births
-as
-(
-	select person_id, episode_end_date
-	from @resultsDatabaseSchema.pregnancy_episodes
-	where outcome = 'LB/DELIV' 
-)
 select 
   cmc1.mom_person_id,
   cmc1.mom_yob,
   cmc1.baby_person_id, 
   cmc1.baby_dob as date_of_birth_from_op,
   moms_births.episode_end_date as date_of_birth_from_alg
-into #probable_mother_childs
-from #candidate_mother_childs cmc1
-join moms_births on cmc1.mom_person_id = moms_births.person_id
-	and moms_births.episode_end_date >= dateadd(dd, -60, cmc1.baby_dob) 
+into #probables
+from #candidates cmc1
+join
+(
+	select person_id, episode_end_date
+	from @resultsDatabaseSchema.pregnancy_episodes
+	where outcome = 'LB/DELIV' 
+) moms_births
+on cmc1.mom_person_id = moms_births.person_id
+  and moms_births.episode_end_date >= dateadd(dd, -60, cmc1.baby_dob) 
 	and moms_births.episode_end_date <= dateadd(dd, 60, cmc1.baby_dob)  
 ;
-
 
 insert into @cdmDatabaseSchema.fact_relationship 
   (domain_concept_id_1, fact_id_1, domain_concept_id_2, fact_id_2, relationship_concept_id)
@@ -115,9 +101,9 @@ from
     56 as domain_concept_id_2, 
     baby_person_id as fact_id_2, 
     @motherRelationshipId as relationship_concept_id
-  from #probable_mother_childs
+  from #probables
 
-  union all
+  union
   
   select 
     56 as domain_concept_id_1, 
@@ -125,8 +111,11 @@ from
     56 as domain_concept_id_2, 
     mom_person_id as fact_id_2, 
     @childRelationshipId as relationship_concept_id
-  from #probable_mother_childs
+  from #probables
 ) A;
 
-truncate table #probable_mother_childs;
-drop table #probable_mother_childs;
+truncate table #candidates;
+drop table #candidates;
+
+truncate table #probables;
+drop table #probables;
